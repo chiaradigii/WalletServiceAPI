@@ -29,6 +29,11 @@ class UserManager(BaseUserManager):
         return user
 
 class User(AbstractBaseUser, PermissionsMixin):
+    USER_TYPES = (
+        ('client', 'Client'),
+        ('merchant', 'Merchant'),
+    )
+    user_type = models.CharField(max_length=10, choices=USER_TYPES, default='client')
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
