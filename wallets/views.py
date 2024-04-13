@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.shortcuts import render
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -29,20 +29,31 @@ class WalletViewSet(viewsets.ModelViewSet):
   
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def recharge(self, request, pk=None):
+        """ Recharge a wallet and create a transaction record."""
         wallet = self.get_object()
-        serializer = WalletRechargeSerializer(data=request.data)
+        serializer = WalletRechargeSerializer(data=request.data, context={'wallet': wallet})
         if serializer.is_valid():
-            serializer.save(wallet=wallet)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            try:
+                # Ensure that both operations are done atomically
+                with transaction.atomic():
+                    serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except ValidationError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def charge(self, request, pk=None):
+        """
+        Widraw an amount from a wallet and create a transaction record.
+        This must be done atomically to prevent inconsistencies
+        """
         wallet = self.get_object()
-        serializer = WalletChargeSerializer(data=request.data)
+        serializer = WalletChargeSerializer(data=request.data, context={'wallet': wallet})
         if serializer.is_valid():
             try:
-                serializer.save(wallet=wallet)
+                with transaction.atomic(): # Ensures that both operations are done atomically
+                    serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except ValidationError as e:
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
