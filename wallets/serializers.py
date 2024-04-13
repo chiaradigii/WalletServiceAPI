@@ -7,7 +7,34 @@ class WalletCreateSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'token', 'balance']
         read_only_fields = ['token', 'balance']  # Token and balance are generated automatically
 
+class WalletChargeSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
 
+    def validate_amount(self, value):
+        """
+        Checks that ampunt is not negative and that there is available balance.
+        """
+        wallet = self.context['wallet']
+        if value <= 0:
+            raise serializers.ValidationError("Charge amount must be greater than zero.")
+        if wallet.balance < value:
+            raise serializers.ValidationError("Insufficient funds available.")
+        return value
+
+    def create(self, validated_data):
+        """
+        Deduct the charge amount from the wallet's balance and create a transaction record.
+        """
+        wallet = self.context['wallet']
+        wallet.balance -= validated_data['amount']
+        wallet.save(update_fields=['balance'])
+        transaction = Transaction.objects.create(
+            wallet=wallet,
+            amount=validated_data['amount'],
+            transaction_type='charge',
+            status='success'
+        )
+        return transaction
 class WalletRechargeSerializer(serializers.Serializer):
     """ Serializer for recharging a wallet"""
     token = serializers.UUIDField(required=True) # Wallet token
