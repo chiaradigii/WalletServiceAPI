@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Wallet Operations</title>
+</head>
+<body>
+    <h1>Wallet Operations</h1>
+    <form action="/wallets/recharge/" method="post">
+        {% csrf_token %}
+        <label for="wallet">Wallet Token:</label>
+        <input type="text" id="wallet" name="wallet"><br><br>
+        <label for="amount">Amount:</label>
+        <input type="text" id="amount" name="amount"><br><br>
+        <button type="submit">Recharge Wallet</button>
+    </form>
+    <hr>
+    <!-- Wallet Charge Form -->
+    <form action="/wallets/charge/" method="post">
+        {% csrf_token %}
+        <label for="wallet">Wallet Token:</label>
+        <input type="text" id="wallet" name="wallet"><br><br>
+        <label for="amount">Amount:</label>
+        <input type="text" id="amount" name="amount"><br><br>
+        <button type="submit">Charge Wallet</button>
+    </form>
+</body>
+</html>

@@ -80,3 +80,8 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         # Filter transactions to those related to user's wallets only
         return Transaction.objects.filter(wallet__user=user)
+    
+from django.shortcuts import render
+
+def test_walletService(request):
+    return render(request, 'wallets/test_walletService.html')
