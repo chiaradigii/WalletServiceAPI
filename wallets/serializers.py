@@ -30,3 +30,21 @@ class WalletStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = Wallet
         fields = ['token', 'balance', 'created_at', 'updated_at']
+
+class TransactionSerializer(serializers.ModelSerializer):
+    """ Serializer for listing and displaying transaction details """
+    class Meta:
+        model = Transaction
+        fields = ['id', 'wallet', 'amount', 'transaction_type', 'status', 'created_at']
+        read_only_fields = ['wallet', 'amount', 'transaction_type', 'status', 'created_at'] # transactions are not modified after creation.
+
+    def to_representation(self, instance):
+        """ 
+        Override to_representation to enhance the API response.
+        Convert transaction type and status to display text
+        """
+        representation = super().to_representation(instance)
+        representation['wallet'] = instance.wallet.token  # Displaying the wallet's token instead of the id
+        representation['transaction_type'] = instance.get_transaction_type_display()
+        representation['status'] = instance.get_status_display()
+        return representation
