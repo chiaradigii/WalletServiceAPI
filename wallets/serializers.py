@@ -35,6 +35,7 @@ class WalletChargeSerializer(serializers.Serializer):
             status='success'
         )
         return transaction
+    
 class WalletRechargeSerializer(serializers.Serializer):
     """ Serializer for recharging a wallet"""
     token = serializers.UUIDField(required=True) # Wallet token
