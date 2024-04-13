@@ -15,9 +15,12 @@ class Wallet(models.Model):
 
     def clean(self):
         super().clean()
-        # Check if client is a merchant and already has a wallet
-        if self.user.user_type == 'merchant' and Wallet.objects.filter(user=self.user).exists():
-            raise ValidationError('Merchant already has a wallet')
+        # Check if merchant and ensure they don't have more than one wallet
+        if self.user.user_type == 'merchant':
+            existing_wallets = Wallet.objects.filter(user=self.user)
+            if existing_wallets.exists() and (not self.pk or self.pk not in existing_wallets.values_list('id', flat=True)):
+                raise ValidationError('Merchants can only have one wallet')
+
 
     # Save method to validate wallet
     def save(self, *args, **kwargs):
