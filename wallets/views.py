@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.http import Http404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -9,7 +10,7 @@ from .serializers import WalletCreateSerializer, WalletStatusSerializer, Transac
 from rest_framework.decorators import action
 from rest_framework import status
 from .serializers import WalletRechargeSerializer, WalletChargeSerializer
-from .permissions import IsClient, IsMerchant, IsOwnerOrMerchant
+from .permissions import IsClient, IsMerchant
 
 class WalletViewSet(viewsets.ModelViewSet):
     """
@@ -32,43 +33,57 @@ class WalletViewSet(viewsets.ModelViewSet):
     serializer_class = WalletStatusSerializer
 
     def get_serializer_class(self):
-        # WalletCreateSerializer for create action - WalletStatusSerializer for list and retrieve actions
         if self.action in ['list', 'retrieve']:
             return WalletStatusSerializer
         return WalletCreateSerializer
 
     def get_queryset(self):
         if self.request.user.is_authenticated:
-            return Wallet.objects.filter(user=self.request.user)
-        else:
-            return Wallet.objects.none()
-  
+            wallets = Wallet.objects.filter(user=self.request.user)
+            print(f"Wallets found: {wallets.count()}")
+            print(f"Wallets: {wallets}")
+            return wallets
+        print("No authenticated user, returning none")
+        return Wallet.objects.none()
+    
+    def get_object(self):
+        try:
+            obj = super().get_object()
+            print(f"Object found: {obj}")
+            return obj
+        except Http404:
+            print("Object not found leading to 404.")
+            raise
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+            raise
+
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsClient])
     def recharge(self, request, pk=None):
-        """ Recharge a wallet and create a transaction record."""
         wallet = self.get_object()
         serializer = WalletRechargeSerializer(data=request.data, context={'wallet': wallet})
         if serializer.is_valid():
-            try:
-                # Ensure that both operations are done atomically
-                with transaction.atomic():
-                    serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            except ValidationError as e:
-                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            with transaction.atomic():
+                serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+    
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsMerchant])
     def charge(self, request, pk=None):
-        """
-        Widraw an amount from a wallet and create a transaction record.
-        This must be done atomically to prevent inconsistencies
-        """
-        wallet = self.get_object()
+        """Charge a client's wallet."""
+        print("Charge method called")
+        print(f"Request by user: {request.user}, is merchant: {request.user.is_merchant}")
+
+        try:
+            wallet = self.get_object()
+            print(f"Wallet found: {wallet.id}")
+        except Wallet.DoesNotExist:
+            print("Wallet not found")
+            return Response({"message": "Wallet not found"}, status=404)
         serializer = WalletChargeSerializer(data=request.data, context={'wallet': wallet})
         if serializer.is_valid():
             try:
-                with transaction.atomic(): # Ensures that both operations are done atomically
+                with transaction.atomic():
                     serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except ValidationError as e:
@@ -87,22 +102,19 @@ class WalletDetailView(APIView):
             return Response({"message": "Wallet not found"}, status=404)
 
 class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Viewset that provides `list` and `retrieve` actions for transactions.
-    Filter transactions by user_type.
-    """
     serializer_class = TransactionSerializer
 
     def get_queryset(self):
         user = self.request.user
         if user.user_type == 'merchant':
-            return Transaction.objects.filter(merchant=user) # Merchants can see transactions here they have charged
-        elif user.user_type == 'client':
-            return Transaction.objects.filter(wallet__user=user) # Clients can see their transactions
-        else:
-            return Transaction.objects.none()
-           
-from django.shortcuts import render
+            # Assuming merchants can see all transactions they are involved in
+            return Transaction.objects.filter(wallet__user=user)
+        return Transaction.objects.filter(wallet__user=user)  # Clients can see their transactions
 
-def test_walletService(request):
-    return render(request, 'wallets/test_walletService.html')
+class ClientWalletsListView(APIView):
+    permission_classes = [IsAuthenticated, IsMerchant]
+
+    def get(self, request, *args, **kwargs):
+        wallets = Wallet.objects.filter(user__user_type='client')
+        serializer = WalletStatusSerializer(wallets, many=True)
+        return Response(serializer.data)

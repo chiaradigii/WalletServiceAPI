@@ -43,11 +43,10 @@ class Transaction(models.Model):
     # A wallet can have multiple transactions
     wallet = models.ForeignKey('Wallet', related_name='transactions', on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    # Transaction type can be charge or recharge
     transaction_type = models.CharField(max_length=8, choices=TRANSACTION_TYPES)
-    # Transaction status can be success or failed
     status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='success')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.transaction_type} - {self.status} - {self.amount}"
+            transaction_by = 'Merchant' if self.wallet.user.user_type == 'merchant' else 'Client'
+            return f"{transaction_by} Transaction: {self.transaction_type} - {self.status} - {self.amount}"
