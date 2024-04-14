@@ -9,6 +9,7 @@ from .serializers import WalletCreateSerializer, WalletStatusSerializer, Transac
 from rest_framework.decorators import action
 from rest_framework import status
 from .serializers import WalletRechargeSerializer, WalletChargeSerializer
+
 class WalletViewSet(viewsets.ModelViewSet):
     """
     Viewset for `create`, `retrieve`, `update`, and `delete` actions for wallets.
@@ -24,8 +25,10 @@ class WalletViewSet(viewsets.ModelViewSet):
         return WalletCreateSerializer
 
     def get_queryset(self):
-        # Ensures that users can only access their own wallets
-        return Wallet.objects.filter(user=self.request.user)
+        if self.request.user.is_authenticated:
+            return Wallet.objects.filter(user=self.request.user)
+        else:
+            return Wallet.objects.none()
   
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def recharge(self, request, pk=None):
