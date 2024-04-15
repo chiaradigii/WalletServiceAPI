@@ -1,6 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -31,6 +32,7 @@ class WalletViewSet(viewsets.ModelViewSet):
     """
     queryset = Wallet.objects.all()
     serializer_class = WalletStatusSerializer
+    lookup_field = 'token'
 
     def get_serializer_class(self):
         if self.action in ['list', 'retrieve']:
@@ -38,25 +40,18 @@ class WalletViewSet(viewsets.ModelViewSet):
         return WalletCreateSerializer
 
     def get_queryset(self):
-        if self.request.user.is_authenticated:
-            wallets = Wallet.objects.filter(user=self.request.user)
-            print(f"Wallets found: {wallets.count()}")
-            print(f"Wallets: {wallets}")
-            return wallets
-        print("No authenticated user, returning none")
-        return Wallet.objects.none()
+        if self.request.user.user_type == 'merchant':
+            return Wallet.objects.all()
+        return Wallet.objects.filter(user=self.request.user)
     
     def get_object(self):
-        try:
-            obj = super().get_object()
-            print(f"Object found: {obj}")
-            return obj
-        except Http404:
-            print("Object not found leading to 404.")
-            raise
-        except Exception as e:
-            print(f"An error occurred: {str(e)}")
-            raise
+        """ Retrieves the object using the UUID token"""
+        # Use the lookup_field and the value from the URL kwargs to filter the queryset
+        filter_kwargs = {self.lookup_field: self.kwargs[self.lookup_field]}
+        obj = get_object_or_404(self.get_queryset(), **filter_kwargs)
+        self.check_object_permissions(self.request, obj)
+        return obj
+
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsClient])
     def recharge(self, request, pk=None):
@@ -69,17 +64,18 @@ class WalletViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsMerchant])
-    def charge(self, request, pk=None):
+    def charge(self, request, token=None):
         """Charge a client's wallet."""
-        print("Charge method called")
-        print(f"Request by user: {request.user}, is merchant: {request.user.is_merchant}")
-
+        if request.user.user_type != 'merchant':
+            return Response({"message": "Unauthorized - Only merchants can perform this action"}, status=status.HTTP_403_FORBIDDEN)
+    
         try:
-            wallet = self.get_object()
-            print(f"Wallet found: {wallet.id}")
+            wallet = get_object_or_404(Wallet, token=token)
+            print(f"Wallet found: {wallet.token}")
         except Wallet.DoesNotExist:
             print("Wallet not found")
             return Response({"message": "Wallet not found"}, status=404)
+        
         serializer = WalletChargeSerializer(data=request.data, context={'wallet': wallet})
         if serializer.is_valid():
             try:
